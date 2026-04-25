@@ -17,7 +17,7 @@ One configuration today, fully functional.
 
 | Variant | Context | Single-stream TPS (narr / code) | Concurrent throughput | Vision | Caveats |
 |---|---|---|---|---|---|
-| **Default** (`docker-compose.yml`) | 64K | 68 / 89 | **257 TPS at 4 concurrent**, **385 TPS at 8 concurrent** | ✅ | Depends on vllm#40361 patch (volume-mounted) |
+| **Default** (`docker-compose.yml`) | **262K** | 68 / 89 short-prompt · 36 at 100K loaded · 28 at 200K loaded | **257 TPS at 4 concurrent**, **385 TPS at 8 concurrent** (short prompts) | ✅ | Depends on vllm#40361 patch (volume-mounted) |
 
 ### What this gives you over the single-card project
 
@@ -192,6 +192,17 @@ Same canonical prompts as the single-card project (800-word essay, quicksort cod
 | 8 | 49 | **385** | 20.7s |
 
 At 4 concurrent, per-stream TPS holds nicely. At 8 concurrent, per-stream drops to ~50 but aggregate hits 385 — that's the regime where dual-card pulls meaningfully ahead of single-card's hard ~85 TPS cap.
+
+**Long-context generation (262K config, prefix-cache warm):**
+
+| Loaded ctx | Cold prefill | Generation TPS (300-tok output) |
+|---|---|---|
+| 100K input | ~101s (one-time) | 36 TPS |
+| 200K input | ~217s (one-time) | 28 TPS |
+
+Cold prefill is the dominant cost at long context — vLLM chunked-prefills at 8192 tok/chunk, so 200K takes ~25 chunks. Once prefilled, subsequent requests against the same prefix hit the cache and only pay generation cost. **Practical UX**: long-context use cases want either pre-warmed prefix caches or to keep sessions alive. Cold-start at 200K is genuinely slow; prefix-cached follow-ups feel snappy.
+
+**Long-context recall:** verify-full.sh's needle ladder passes at 10K / 30K / 60K / 90K. Recall at deeper depths (180K / 240K) is plausible but not yet measured systematically.
 
 ---
 
